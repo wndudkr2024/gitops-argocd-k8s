@@ -1,0 +1,21 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/wndudkr2024/gitops-argocd-k8s.git
+    targetRevision: main
+    path: apps/nginx/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nginx-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
