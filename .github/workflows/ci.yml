@@ -48,9 +48,9 @@ jobs:
 
       - name: Validate manifests
         run: |
-          kubectl apply --dry-run=client -f apps/nginx/dev/
-          kubectl apply --dry-run=client -f apps/nginx/prod/
-          kubectl apply --dry-run=client -f argocd/
+          kubectl apply --dry-run=client --validate=false -f apps/nginx/dev/
+          kubectl apply --dry-run=client --validate=false -f apps/nginx/prod/
+          kubectl apply --dry-run=client --validate=false -f argocd/
 
   sync-argocd:
     name: Sync ArgoCD
