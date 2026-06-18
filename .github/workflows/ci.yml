@@ -43,16 +43,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install kubeval
+      - name: Install kubeconform
         run: |
-          wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
-          tar xf kubeval-linux-amd64.tar.gz
-          sudo mv kubeval /usr/local/bin
+          wget https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin
 
       - name: Validate manifests
         run: |
-          kubeval apps/nginx/dev/*.yml
-          kubeval apps/nginx/prod/*.yml
+          kubeconform -strict apps/nginx/dev/
+          kubeconform -strict apps/nginx/prod/
 
   sync-argocd:
     name: Sync ArgoCD
