@@ -1,0 +1,7 @@
+---
+- name: Install k3s and ArgoCD
+  hosts: all
+  become: true
+
+  roles:
+    - k3s_argocd

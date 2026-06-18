@@ -1,0 +1,114 @@
+---
+- name: Install required packages
+  ansible.builtin.dnf:
+    name:
+      - wget
+      - git
+    state: present
+
+- name: Create swap file
+  ansible.builtin.command:
+    cmd: dd if=/dev/zero of=/swapfile bs=1M count={{ k3s_argocd_swap_size_mb }}
+    creates: /swapfile
+
+- name: Set swap file permissions
+  ansible.builtin.file:
+    path: /swapfile
+    mode: '0600'
+
+- name: Format swap file
+  ansible.builtin.command:
+    cmd: mkswap /swapfile
+  changed_when: false
+  failed_when: false
+
+- name: Enable swap
+  ansible.builtin.command:
+    cmd: swapon /swapfile
+  register: k3s_argocd_swapon_result
+  changed_when: k3s_argocd_swapon_result.rc == 0
+  failed_when: false
+
+- name: Add swap to fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: '/swapfile none swap sw 0 0'
+    state: present
+
+- name: Download k3s install script
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'
+
+- name: Install k3s
+  ansible.builtin.command:
+    cmd: /tmp/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_argocd_version }}"
+  args:
+    creates: /usr/local/bin/k3s
+
+- name: Wait for k3s to be ready
+  ansible.builtin.wait_for:
+    path: /etc/rancher/k3s/k3s.yaml
+    timeout: 60
+
+- name: Enable and start k3s
+  ansible.builtin.service:
+    name: k3s
+    state: started
+    enabled: true
+
+- name: Verify k3s is running
+  ansible.builtin.command:
+    cmd: k3s kubectl get nodes
+  register: k3s_argocd_nodes
+  changed_when: false
+
+- name: Print k3s nodes
+  ansible.builtin.debug:
+    msg: "{{ k3s_argocd_nodes.stdout }}"
+
+- name: Create ArgoCD namespace
+  ansible.builtin.command:
+    cmd: k3s kubectl create namespace {{ k3s_argocd_namespace }}
+  register: k3s_argocd_ns
+  changed_when: k3s_argocd_ns.rc == 0
+  failed_when: k3s_argocd_ns.rc != 0 and 'already exists' not in k3s_argocd_ns.stderr
+
+- name: Install ArgoCD
+  ansible.builtin.command:
+    cmd: >
+      k3s kubectl apply -n {{ k3s_argocd_namespace }}
+      -f https://raw.githubusercontent.com/argoproj/argo-cd/{{ k3s_argocd_argocd_version }}/manifests/install.yaml
+  changed_when: false
+
+- name: Wait for ArgoCD server to be ready
+  ansible.builtin.command:
+    cmd: >
+      k3s kubectl wait --namespace {{ k3s_argocd_namespace }}
+      --for=condition=ready pod
+      --selector=app.kubernetes.io/name=argocd-server
+      --timeout=120s
+  changed_when: false
+
+- name: Patch ArgoCD server service to NodePort
+  ansible.builtin.command:
+    cmd: >
+      k3s kubectl patch svc argocd-server
+      -n {{ k3s_argocd_namespace }}
+      -p '{"spec":{"type":"NodePort","ports":[{"port":80,"targetPort":8080,"nodePort":{{ k3s_argocd_nodeport }}}]}}'
+  changed_when: false
+
+- name: Get ArgoCD initial admin password
+  ansible.builtin.command:
+    cmd: >
+      k3s kubectl -n {{ k3s_argocd_namespace }} get secret argocd-initial-admin-secret
+      -o jsonpath="{.data.password}"
+  register: k3s_argocd_password
+  changed_when: false
+
+- name: Print ArgoCD admin password
+  ansible.builtin.debug:
+    msg: "ArgoCD admin password (base64): {{ k3s_argocd_password.stdout }}"
